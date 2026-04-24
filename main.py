@@ -9,7 +9,7 @@ from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 
 # --- SOZLAMALAR ---
-TOKEN = "8636087303:AAEsZvZ6JO0lD8mCwtbuIQBnTBDAejZgCnE"
+TOKEN = "8658700234:AAH9UAodf490eDdZsS_ix3SZKHtzzXNWD6E"
 ADMIN_ID = 8684039353
 
 
