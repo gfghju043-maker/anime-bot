@@ -111,7 +111,7 @@ async def cmd_start(message: Message):
     else:
         await message.answer("🎬 Salom! Kino kodini yoki Playlist ID-sini yuboring (Masalan: PL1).")
 
-# 1. KANALLAR SOZLAMASI (QO'SHISH VA O'CHIRISH)
+# 1. KANALLAR SOZLAMASI
 @dp.message(F.text == "🔐 Kanallar sozlamasi", F.from_user.id == ADMIN_ID)
 async def ch_settings(message: Message):
     channels = db.cursor.execute("SELECT id, username FROM channels").fetchall()
@@ -138,7 +138,7 @@ async def add_ch_call(call: CallbackQuery, state: FSMContext):
 async def save_ch(message: Message, state: FSMContext):
     db.cursor.execute("INSERT INTO channels (username) VALUES (?)", (message.text,))
     db.conn.commit()
-    await message.answer(f"✅ {message.text} majburiy obunaga qo'shildi!", reply_markup=admin_main_kb())
+    await message.answer(f"✅ {message.text} qo'shildi!", reply_markup=admin_main_kb())
     await state.clear()
 
 @dp.callback_query(F.data == "del_ch_list")
@@ -154,56 +154,31 @@ async def del_ch_list(call: CallbackQuery):
 async def remove_ch_final(call: CallbackQuery):
     ch_id = int(call.data.split("_")[1])
     db.delete_channel(ch_id)
-    await call.answer("✅ Kanal majburiy obunadan olib tashlandi!", show_alert=True)
+    await call.answer("✅ Kanal olib tashlandi!", show_alert=True)
     await call.message.delete()
 
-# 2. PLAYLISTDAN KINO O'CHIRISH
-@dp.message(F.text == "🗑 Playlistdan kino o'chirish", F.from_user.id == ADMIN_ID)
-async def pl_del_start(message: Message, state: FSMContext):
-    await state.set_state(AdminStates.waiting_for_pl_del_pid)
-    await message.answer("🆔 Playlist ID-sini yuboring:")
+# 2. PLAYLISTLAR
+@dp.message(F.text == "🗂 Playlist yaratish", F.from_user.id == ADMIN_ID)
+async def pl_create(message: Message, state: FSMContext):
+    await state.set_state(AdminStates.waiting_for_pl_name)
+    await message.answer("📝 Playlist nomini yozing:")
 
-@dp.message(AdminStates.waiting_for_pl_del_pid, F.text.isdigit())
-async def pl_del_pid(message: Message, state: FSMContext):
-    await state.update_data(pid=message.text)
-    items = db.cursor.execute("SELECT m.id, m.caption FROM movies m JOIN playlist_items pi ON m.id = pi.movie_id WHERE pi.playlist_id=?", (message.text,)).fetchall()
-    if items:
-        text = "📋 Kinolar:\n" + "\n".join([f"🆔 {i[0]} - {i[1]}" for i in items])
-        await message.answer(text + "\n\nO'chirmoqchi bo'lgan kino ID-sini yuboring:")
-        await state.set_state(AdminStates.waiting_for_pl_del_mid)
-    else:
-        await message.answer("Bu playlist bo'sh."); await state.clear()
+@dp.message(AdminStates.waiting_for_pl_name)
+async def pl_save(message: Message, state: FSMContext):
+    res = db.create_playlist(message.text)
+    if res: await message.answer(f"✅ Yaraldi: `PL{res}`", parse_mode="Markdown")
+    else: await message.answer("❌ Xatolik.")
+    await state.clear()
 
-@dp.message(AdminStates.waiting_for_pl_del_mid, F.text.isdigit())
-async def pl_del_done(message: Message, state: FSMContext):
-    data = await state.get_data()
-    db.remove_from_playlist(int(data['pid']), int(message.text))
-    await message.answer("✅ O'chirildi."); await state.clear()
+@dp.message(F.text == "➕ Playlistga qo'shish", F.from_user.id == ADMIN_ID)
+async def pl_add_mid(message: Message, state: FSMContext):
+    await state.set_state(AdminStates.waiting_for_pl_add_mid)
+    await message.answer("🆔 Kino ID raqamini yuboring:")
 
-# --- QOLGAN FUNKSIYALAR ---
-
-@dp.message(F.text == "🎬 Kino qo'shish", F.from_user.id == ADMIN_ID)
-async def m_add(message: Message, state: FSMContext):
-    await state.set_state(AdminStates.adding_movie_video); await message.answer("📽 Video yuboring:")
-
-@dp.message(AdminStates.adding_movie_video, F.video | F.document)
-async def m_v(message: Message, state: FSMContext):
-    fid = message.video.file_id if message.video else message.document.file_id
-    await state.update_data(vid=fid); await state.set_state(AdminStates.adding_movie_name)
-    await message.answer("📝 Nomi:")
-
-@dp.message(AdminStates.adding_movie_name)
-async def m_n(message: Message, state: FSMContext):
-    data = await state.get_data()
-    mid = db.add_movie(data['vid'], message.text)
-    await message.answer(f"✅ Saqlandi ID: `{mid}`", parse_mode="Markdown"); await state.clear()
-
-@dp.message(F.text == "🗑 Kino o'chirish", F.from_user.id == ADMIN_ID)
-async def del_m(message: Message, state: FSMContext):
-    await state.set_state(AdminStates.waiting_for_del_id); await message.answer("🆔 Kino ID:")
-
-@dp.message(AdminStates.waiting_for_del_id, F.text.isdigit())
-async def del_m_d(message: Message, state: FSMContext):
-    db.delete_movie(int(message.text)); await message.answer("✅ O'chirildi."); await state.clear()
-
-@dp.message(F.text == "🗂 Playlist yaratish", F.from_user.id == ADMIN_ID
+@dp.message(AdminStates.waiting_for_pl_add_mid, F.text.isdigit())
+async def pl_add_choose(message: Message, state: FSMContext):
+    pls = db.cursor.execute("SELECT id, name FROM playlists").fetchall()
+    if not pls:
+        await message.answer("Playlistlar yo'q!"); await state.clear(); return
+    btns = [[InlineKeyboardButton(text=p[1], callback_data=f"plsave_{p[0]}_{message.text}")] for p in pls]
+    await message.answer("Playlistni tanlang:", reply_
